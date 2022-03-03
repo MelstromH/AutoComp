@@ -28,7 +28,7 @@ d = n - timedelta(days = 1)
 print(n)
 print (d)
 
-#twitch = Twitch('yeqy66uhhm2t0dfa58b0rdhz7prdi7', 'yqkk3fa7owzsokord9qngkqf1ieth0')
+#twitch = Twitch(to be switch to json)
 
 #pprint(twitch.get_clips(game_id = "21779", ended_at = n,  started_at = d, first = 10))
 
