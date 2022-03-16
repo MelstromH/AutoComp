@@ -7,6 +7,7 @@ from pprint import pprint
 import streamlink
 import requests
 from moviepy.editor import *
+import json
 
 import httplib2
 import os
@@ -14,43 +15,60 @@ import random
 import sys
 import time
 
-from apiclient.discovery import build
-from apiclient.errors import HttpError
-from apiclient.http import MediaFileUpload
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.file import Storage
 from oauth2client.tools import argparser, run_flow
 
+#Getting the current time, and formatting it to be used to query the twitch API
+now = datetime.datetime.now()
+now.isoformat()
+yesterday = now - timedelta(days = 1)
 
-n = datetime.datetime.now()
-n.isoformat()
-d = n - timedelta(days = 1)
-print(n)
-print (d)
+#Authenticating twitch from a local json file
+twitchAuthFile = open('twitchAuth.json')
+twitchAuthDict = json.load(twitchAuthFile)
+twitchAuthFile.close()
+twitch = Twitch(twitchAuthDict['TwitchAuth'][0]['token'], twitchAuthDict['TwitchAuth'][0]['secret'])
 
-#twitch = Twitch(to be switch to json)
+#querying the twitch API using the twitchAPI library
+clipsRaw = twitch.get_clips(game_id = "21779", ended_at = now,  started_at = yesterday, first = 10)
 
-#pprint(twitch.get_clips(game_id = "21779", ended_at = n,  started_at = d, first = 10))
+#creating list of files to be harvested from the links in Twitch's json response
+files = []
+p = 0
+for i in clipsRaw['data']:
+  clipURL = clipsRaw['data'][p]['url']
 
-#streams = streamlink.streams("https://clips.twitch.tv/DignifiedDirtyDolphinSeemsGood-_maT4oq2wZ9D8zxc")
-#pprint(streams)
+  #getting the URLs of the video files on the clip pages
+  streams = streamlink.streams(clipURL)
+  bestStream = streams['best']
+  streamURL = bestStream.url
 
-#r = requests.get('https://production.assets.clips.twitchcdn.net/AT-cm%7CrZZwWP5mk-KKtsGfQ_M8XA.mp4?sig=8ef3e2538c3e9d70866d66a54170b690e1b0d875&token=%7B%22authorization%22%3A%7B%22forbidden%22%3Afalse%2C%22reason%22%3A%22%22%7D%2C%22clip_uri%22%3A%22https%3A%2F%2Fproduction.assets.clips.twitchcdn.net%2FAT-cm%257CrZZwWP5mk-KKtsGfQ_M8XA.mp4%22%2C%22device_id%22%3Anull%2C%22expires%22%3A1643729687%2C%22user_id%22%3A%22%22%2C%22version%22%3A2%7D')
-#with open('TestFile2.mp4', 'wb') as fd:
-#  fd.write(r.content)
+  #downloading the files via requests
+  r = requests.get(streamURL)
+  with open('clip' + str(p) + '.mp4', 'wb') as fd:
+    fd.write(r.content)
 
+  #adding the files to the list
+  files.append(str('clip' + str(p) + '.mp4'))
 
-#files = [('TestFile.mp4', 'TestFile2.mp4')]
+  p = p + 1
 
+#function to eddit the video together
+def edit_video(files):
+  clips = []
+  for cindex in files:
+    clips.append(VideoFileClip(cindex))
 
-#def edit_video(files):
-#  clip1 = VideoFileClip("TestFile.mp4")
-#  clip2 = VideoFileClip("TestFile2.mp4")
+  final_vid = concatenate_videoclips(clips)
+  final_vid.write_videofile("TestFinal.mp4")
 
-#  final_vid = concatenate_videoclips([clip1, clip2])
-#  final_vid.write_videofile("TestFinal.mp4")
+edit_video(files)
 
-#edit_video(files)
+#code pretty much taken from google's page on uploading a youtube video
 
 # Explicitly tell the underlying HTTP transport library not to retry, since
 # we are handling retry logic ourselves.
@@ -76,7 +94,7 @@ RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
 #   https://developers.google.com/youtube/v3/guides/authentication
 # For more information about the client_secrets.json file format, see:
 #   https://developers.google.com/api-client-library/python/guide/aaa_client_secrets
-CLIENT_SECRETS_FILE = "client_secret_68560296238-sfieo7v0cdnoi09e0923qtlujjtqb1ea.apps.googleusercontent.com.json"
+CLIENT_SECRETS_FILE = "GoogleSecret.json"
 
 # This OAuth 2.0 access scope allows an application to upload files to the
 # authenticated user's YouTube channel, but doesn't allow other types of access.
@@ -192,17 +210,17 @@ def resumable_upload(insert_request):
       time.sleep(sleep_seconds)
 
 if __name__ == '__main__':
-  argparser.add_argument("--file", required=True, help="Video file to upload")
+  argparser.add_argument("--file", help="Video file to upload", default="TestFinal.mp4")
   argparser.add_argument("--title", help="Video title", default="Test Title")
   argparser.add_argument("--description", help="Video description",
     default="Test Description")
-  argparser.add_argument("--category", default="22",
+  argparser.add_argument("--category", default="20",
     help="Numeric video category. " +
       "See https://developers.google.com/youtube/v3/docs/videoCategories/list")
   argparser.add_argument("--keywords", help="Video keywords, comma separated",
-    default="")
+    default="league, of, legends, compilation, twitch, highlights, clips, top, best, aggregator")
   argparser.add_argument("--privacyStatus", choices=VALID_PRIVACY_STATUSES,
-    default=VALID_PRIVACY_STATUSES[0], help="Video privacy status.")
+    default=VALID_PRIVACY_STATUSES[2], help="Video privacy status.")
   args = argparser.parse_args()
 
   if not os.path.exists(args.file):
